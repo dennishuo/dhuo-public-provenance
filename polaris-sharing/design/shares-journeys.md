@@ -1,21 +1,19 @@
-<!-- promoted: receipt pr-5d491573 · public-id shares-journeys · class state · revision 3 · supersedes receipt pr-cddc98d4 · exported 2026-10-23 · license Apache-2.0 · body-sha256 63286b6ec8840db0ae9bea7599d2c7f11bf4d463cabe44842c99e18911986b9c
+<!-- promoted: receipt pr-5098f84e · public-id shares-journeys · class state · revision 4 · supersedes receipt pr-5d491573 · exported 2026-10-26 · license Apache-2.0 · body-sha256 65d9a8f9f80a71ae70d3774232b8a9ba487d8b35bef951da825f575682248077
      source: a private provenance chain (opaque; the mapping lives with the source). This document is maintained
      in place: every revision is a commit; earlier revisions stay in history, which is never rewritten. -->
 
 # Polaris shares: end-to-end journeys
 
-Companion to the Polaris shares design document, whose public revision follows its check against the implementation. The design holds the decisions and their reasons. This note shows them as calls: every provider and consumer request, with paths and example payloads.
+Companion to the Polaris shares design document, whose public revision follows. The design holds the decisions and their reasons. This note shows them as calls: every provider and consumer request, with paths and example payloads.
 
-Revised 2026-10-23 for the specification in apache/polaris#5446 (`info.version` 0.0.1). The specification has two files:
-- the core API: shares and members;
-- the optional consumer-management API: external consumers, listings, endpoint configuration and credentials.
+Revised 2026-10-26 for the specification in apache/polaris#5446 (`info.version` 0.0.1), the core API: shares and members. The optional consumer-management API (external consumers, listings, endpoint configuration and credentials) will be proposed separately. These journeys show where it fits.
 
 How a consumer authenticates is left to the deployment.
 
 Three things vary independently:
 - **How the reader authenticates.** It can use its own identity provider, federated (proposed), a credential Polaris issues, or its standing as one of the provider's own principals. No path depends on this.
 - **What admits the reader.** A listing, a static configuration, or, in the J7 alternative, the authorizer.
-- **The paths.** J1 is the recommended combination and the one the specification takes; J2 to J6 record the alternatives.
+- **The paths.** J1 is the recommended combination; J2 to J6 record the alternatives.
 
 The first three sections are J1 under each way of authenticating, federation first.
 
@@ -35,7 +33,7 @@ The provider never calls the data root and the consumer never calls the manageme
 
 ## J1 with federation: the consumer's own identity provider (proposed)
 
-**Proposed:** this is the external identity provider addendum. It is not in the specification at 0.0.1 and not built, and nothing in the specification precludes it. Field names are illustrative.
+**Proposed:** this is the external identity provider addendum. It is not in the specification at 0.0.1, and nothing in the specification precludes it. Field names are illustrative.
 
 Beta Corp's workloads authenticate with Beta Corp's own identity provider: a corporate one, or the workload identity its cloud platform issues. The external consumer records which tokens are Beta Corp's, as a federation policy. Beta Corp's identity provider issues each token, addressed to Polaris; Polaris only validates it and mints nothing. Nobody creates, sends or stores a secret, and no Polaris principal stands behind the consumer.
 
@@ -90,12 +88,12 @@ Every call carries Beta Corp's token, and Polaris validates it each time: the is
 What Polaris would need:
 - **Trust per consumer.** Polaris validates tokens from each issuer an external consumer names, with that issuer's published keys. Realm-level authentication today trusts only the issuers the deployment configures.
 - **Resolution.** A token's issuer and subject resolve to exactly one external consumer.
-- **Admission without a principal.** The listing record is the evidence. Every admitted request is already served by a principal built for that request alone, holding only the share's role, so the consumer needs no principal of its own.
-- **In the specification:** an optional federation policy on the external consumer. That is an additive change to the optional file.
+- **Admission without a principal.** The listing record is the evidence. As in every admission, the request is served by a principal built for that request alone, holding only the share's role, so the consumer needs no principal of its own.
+- **In the specification:** an optional federation policy on the external consumer, in the consumer-management API.
 
 ## J1 with a credential Polaris issues
 
-A consumer with no identity provider to federate gets a client credential from Polaris, through the optional file's credential operations. This is built today. Only these rows differ from the federated journey:
+A consumer with no identity provider to federate gets a client credential from Polaris, through the consumer-management API's credential operations. Only these rows differ from the federated journey:
 
 | Step | Call | Result |
 |---|---|---|
@@ -110,14 +108,14 @@ The provider sends the secret over a channel the two parties trust. On a realm t
 
 ## J1 without consumer management: static admission
 
-The deployment serves only the core API and admits readers from a static configuration. The reader is an ordinary Polaris principal, `beta-reader`, which the provider creates and grants as usual. There is no external consumer, credential, listing or endpoint configuration.
+The deployment serves only the core API and admits readers by its own rule, here a static configuration. The reader is an ordinary Polaris principal, `beta-reader`, which the provider creates and grants as usual. There is no external consumer, credential, listing or endpoint configuration.
 
 | Step | Call | Result |
 |---|---|---|
-| P1 Enable | deployment configuration: `ENABLE_SHARES=true`, `polaris.shares.consumer-management.enabled=false`, `polaris.shares.admission.type=static` | no API |
-| P1a Admission rule | a JSON file naming, for realm `acme` and share `q1-marketing`, the principal `beta-reader` or a principal role it holds: `{"realms": {"acme": {"shares": {"q1-marketing": {"principals": ["beta-reader"]}}}}}` | read at startup; a missing or malformed file stops the server |
+| P1 Enable | deployment configuration: sharing enabled, consumer management not served, admission from a static configuration | no API |
+| P1a Admission rule | the configuration names, for realm `acme` and share `q1-marketing`, the principal `beta-reader` or a principal role it holds | no API; for example a file read at startup |
 | P2, P3 | as in the federated journey | |
-| P4 to P7 | not served | the consumer-management routes answer `404` |
+| P4 to P7 | not served | no consumer-management routes |
 | C1 Token | the principal's ordinary token | from Polaris (`/api/catalog/v1/oauth/tokens`), or from the provider's own identity provider |
 | C2 to C8 | as in the federated journey | the same data root, prefix, member filtering and read-only vending |
 | L2 Revoke | remove the rule and restart, or revoke the matched principal role | `404` from the next request; a role revocation takes effect at once |
@@ -128,11 +126,11 @@ Each admitted request runs as a request-local principal that holds only the shar
 
 ## How each reader is admitted
 
-| The reader authenticates with | Admitted through | Polaris principal | Status |
+| The reader authenticates with | Admitted through | Polaris principal | In the specification |
 |---|---|---|---|
-| its own identity provider, federated | a listing | none | proposed |
-| a credential Polaris issues | a listing | the consumer's hidden principal | built |
-| the provider's own identity provider or Polaris credentials, as a stored principal | static admission | the stored principal | built |
+| its own identity provider, federated | a listing | none | proposed (an optional federation policy) |
+| a credential Polaris issues | a listing | the consumer's hidden principal | proposed (the consumer-management API) |
+| the provider's own identity provider or Polaris credentials, as a stored principal | the deployment's own rule, for example a static configuration | the stored principal | left to the service |
 | an identity provider alone, with no principal stored | the authorizer (J7) | none | proposed |
 
 ## Payloads
@@ -230,8 +228,8 @@ The third row is the setup J1 cannot serve. Polaris requires an external authori
 | Can an authorizer widen *what* is read | no | no: membership still bounds the share |
 | A listing is | the binding and the gate | the standardized grant record |
 | Discovery lists | the caller's listings | the shares the authorizer admits the caller to |
-| Specification change | none | the core text says the authorizer decides admission, using consumers and listings; "grants an external consumer access" becomes "records a grant" |
-| Implementation change | none | a third admission implementation, which asks the authorizer. The Authorizer SPI gains a share-read operation: an interface change, for the dev list first |
+| Specification change | none | none in the core, which leaves who may read to the service's authorization; in the consumer-management API, a listing records a grant |
+| Implementation change | none | admission asks the configured authorizer. The Authorizer SPI gains a share-access operation: an interface change, for the dev list first |
 
 Open questions:
 1. **May an authorizer admit a caller with no listing?** As drafted, yes. A stricter variant keeps an active listing as a precondition, which leaves *who* reads as in J1.
@@ -246,7 +244,7 @@ The Shares API defines shares and members, nothing more. Who reads a share is or
 |---|---|---|
 | P2, P3 | as J1 | the share, its roles and its members |
 | P4′ Create the partner | `POST /api/management/v1/principals` `{ "principal": { "name": "beta-corp" } }` | an ordinary principal |
-| P6′ Grant the share | `PUT /api/management/v1/principals/beta-corp/principal-roles` naming the share's principal role | a role assignment: the grant a listing writes today |
+| P6′ Grant the share | `PUT /api/management/v1/principals/beta-corp/principal-roles` naming the share's principal role | a role assignment: the grant a listing implies under built-in RBAC |
 | P7′ Hand over connection details | none | the administrator assembles the data root, `warehouse`, token endpoint and headers by hand |
 | C1 to C8 | as J1 | as J1, if the shares data root is kept |
 | L2′ Revoke | `DELETE /api/management/v1/principals/beta-corp/principal-roles/{share role}` | the next call fails |
@@ -256,7 +254,7 @@ Under an identity provider whose principals Polaris does not store, P4′ and P6
 
 Followed through:
 1. **The share's role reaches the whole catalog's names.** The share's catalog role holds `NAMESPACE_LIST`, `NAMESPACE_READ_PROPERTIES` and `TABLE_LIST` on the catalog, because the shares data root runs the catalog's own list and load operations and then filters to members. A principal holding the share's role ambiently, as P6′ grants it, can call the catalog root (`/api/catalog/v1/sales/…`), list every namespace and table name in `sales`, and read every namespace's properties. There are two fixes:
-   - Keep the reader on the shares root. That needs a request-time marker that the caller is share-only: on a stored principal, which is what an external consumer's principal carries today, or on roles from token claims, which only the identity provider controls. Either way the consumer distinction returns below the API, where the specification cannot name it.
+   - Keep the reader on the shares root. That needs a request-time marker that the caller is share-only: on a stored principal, which is what the design gives a managed consumer's principal, or on roles from token claims, which only the identity provider controls. Either way the consumer distinction returns below the API, where the specification cannot name it.
    - Narrow the share's grants to members and rely on general list filtering in the catalog API (an open upstream proposal). Then the shares root becomes optional, and a share is a catalog role with read grants.
 2. **"Shared with whom" becomes a graph query** over the share role's assignees. An assignment has no state, metadata or audit record of its own.
 3. **The connection hand-off is unspecified.** The endpoint configuration has no counterpart.
